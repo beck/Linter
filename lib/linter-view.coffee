@@ -142,7 +142,7 @@ class LinterView
   # Internal: Process the messages returned by linters and render them.
   #
   # messages - An array of messages to annotate:
-  #           :level  - the annotation error level ('error', 'warning')
+  #           :level  - the annotation error level ('error', 'warning', 'info')
   #           :range - The buffer range that the annotation should be placed
   processMessage: (messages, tempFileInfo, linter) =>
     log "#{linter.linterName} returned", linter, messages
@@ -161,29 +161,46 @@ class LinterView
     m.destroy() for m in @markers
     @markers = null
 
-  # Internal: Render all the linter messages
+  # Internal: Create marker from message
+  createMarker: (message) ->
+    marker = @editor.markBufferRange message.range, invalidate: 'never'
+    klass = 'linter-' + message.level
+    if @showGutters
+      @editor.decorateMarker marker, type: 'gutter', class: klass
+    if @showHighlighting
+      @editor.decorateMarker marker, type: 'highlight', class: klass
+    return marker
+
+  # Internal: Render gutter icons and highlights for all linter messages. If a
+  # line has multiple messages, render the message with the highest level.
   display: ->
     @destroyMarkers()
 
     return unless @editor.isAlive()
 
-    if @showGutters or @showHighlighting
-      @markers ?= []
-      for message in @messages
-        klass = if message.level == 'error'
-          'linter-error'
-        else if message.level == 'warning'
-          'linter-warning'
-        continue unless klass?  # skip other messages
+    if not (@showGutters or @showHighlighting)
+      @updateViews()
+      return
 
-        marker = @editor.markBufferRange message.range, invalidate: 'never'
-        @markers.push marker
+    @markers ?= []
+    lines = {}
+    levels = [false, 'info', 'warning', 'error']
 
-        if @showGutters
-          @editor.decorateMarker marker, type: 'gutter', class: klass
+    for message in @messages
+      lNum = message.line
+      line = lines[lNum] || { 'level': 0 }
+      msg_level = levels.indexOf(message.level)
+      if msg_level < line.level
+        continue
+      line.level = msg_level
+      line.msg = message
+      lines[lNum] = line
 
-        if @showHighlighting
-          @editor.decorateMarker marker, type: 'highlight', class: klass
+    for lNum, line of lines
+      if line.level < 1
+        continue
+      marker = @createMarker(line.msg)
+      @markers.push marker
 
     @updateViews()
 
