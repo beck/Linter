@@ -171,8 +171,23 @@ class LinterView
       @editor.decorateMarker marker, type: 'highlight', class: klass
     return marker
 
-  # Internal: Render gutter icons and highlights for all linter messages. If a
-  # line has multiple messages, render the message with the highest level.
+  # Internal: Pidgeonhole messages onto lines. Each line gets only one message,
+  # the message with the highest level presides.
+  sortMessagesByLine: (messages) ->
+    lines = {}
+    levels = [false, 'info', 'warning', 'error']
+    for message in @messages
+      lNum = message.line
+      line = lines[lNum] || { 'level': 0 }
+      msg_level = levels.indexOf(message.level)
+      if msg_level < line.level
+        continue
+      line.level = msg_level
+      line.msg = message
+      lines[lNum] = line
+    return lines
+
+  # Internal: Render gutter icons and highlights for all linter messages.
   display: ->
     @destroyMarkers()
 
@@ -183,18 +198,7 @@ class LinterView
       return
 
     @markers ?= []
-    lines = {}
-    levels = [false, 'info', 'warning', 'error']
-
-    for message in @messages
-      lNum = message.line
-      line = lines[lNum] || { 'level': 0 }
-      msg_level = levels.indexOf(message.level)
-      if msg_level < line.level
-        continue
-      line.level = msg_level
-      line.msg = message
-      lines[lNum] = line
+    lines = sortMessagesByLines(@messages)
 
     for lNum, line of lines
       if line.level < 1
